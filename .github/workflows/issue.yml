@@ -1,4 +1,4 @@
-name: Issue Assignment 
+name: Issue Assignment & Tracking
 
 on:
   issues:
@@ -6,16 +6,55 @@ on:
   issue_comment:
     types: [created]
   schedule:
-    - cron: "*/1 * * * *"  # Runs every 5 minutes
+    - cron: "*/1 * * * *"  # Runs every minute
 
 permissions:
   issues: write
 
 jobs:
+  assign-issues:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Assign Issue Creator if Opted In
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const issue = context.payload.issue;
+            const body = (issue.body || "").toLowerCase().replace(/\s+/g, " ");
+            
+            if (body.includes("would you like to work on this issue? yes")) {
+              console.log(`Assigning issue #${issue.number} to ${issue.user.login}`);
+
+              await github.rest.issues.addAssignees({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issue.number,
+                assignees: [issue.user.login],
+              });
+
+              const labels = issue.labels.map(l => l.name);
+              if (labels.includes("up-for-grabs")) {
+                await github.rest.issues.removeLabel({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: issue.number,
+                  name: "up-for-grabs"
+                }).catch(() => {});
+              }
+
+              await github.rest.issues.addLabels({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issue.number,
+                labels: ["Status: Assigned"]
+              });
+            }
+
   check-deadlines:
     runs-on: ubuntu-latest
     steps:
-      - name: Check Issue Deadlines (Testing in Minutes)
+      - name: Check Issue Deadlines
         uses: actions/github-script@v7
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
@@ -33,20 +72,19 @@ jobs:
               const createdAt = new Date(issue.created_at);
               let deadlineMinutes = 0;
 
-              if (issue.labels.some(l => l.name === "priority: high")) deadlineMinutes = 3;  // 3 minutes
-              if (issue.labels.some(l => l.name === "priority: medium")) deadlineMinutes = 6; // 6 minutes
-              if (issue.labels.some(l => l.name === "priority: low")) deadlineMinutes = 8;  // 8 minutes
+              if (issue.labels.some(l => l.name === "priority: high")) deadlineMinutes = 3;
+              if (issue.labels.some(l => l.name === "priority: medium")) deadlineMinutes = 6;
+              if (issue.labels.some(l => l.name === "priority: low")) deadlineMinutes = 8;
 
               if (!deadlineMinutes) continue;
 
-              const deadline = new Date(createdAt);
-              deadline.setMinutes(deadline.getMinutes() + deadlineMinutes);
+              const deadline = new Date(createdAt.getTime() + deadlineMinutes * 60000);
+              const reminderTime = new Date(deadline.getTime() - 60000);
 
-              const reminder = new Date(deadline);
-              reminder.setMinutes(reminder.getMinutes() - 1);
+              console.log(`Checking issue #${issue.number}: Deadline at ${deadline}, Reminder at ${reminderTime}`);
 
-              // Send reminder 1 minute before deadline
-              if (now.toISOString().slice(0, 16) === reminder.toISOString().slice(0, 16)) {
+              // Send reminder 1 min before deadline
+              if (now >= reminderTime && now < deadline) {
                 await github.rest.issues.createComment({
                   owner: context.repo.owner,
                   repo: context.repo.repo,
@@ -56,7 +94,9 @@ jobs:
               }
 
               // If deadline exceeded, unassign and mark as up-for-grabs
-              if (now > deadline) {
+              if (now >= deadline) {
+                console.log(`Unassigning issue #${issue.number} due to deadline exceed`);
+
                 await github.rest.issues.removeAssignees({
                   owner: context.repo.owner,
                   repo: context.repo.repo,
@@ -64,12 +104,15 @@ jobs:
                   assignees: issue.assignees.map(a => a.login),
                 });
 
-                await github.rest.issues.removeLabel({
-                  owner: context.repo.owner,
-                  repo: context.repo.repo,
-                  issue_number: issue.number,
-                  name: "Status: Assigned"
-                }).catch(() => {});
+                const labels = issue.labels.map(l => l.name);
+                if (labels.includes("Status: Assigned")) {
+                  await github.rest.issues.removeLabel({
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                    issue_number: issue.number,
+                    name: "Status: Assigned"
+                  }).catch(() => {});
+                }
 
                 await github.rest.issues.addLabels({
                   owner: context.repo.owner,
