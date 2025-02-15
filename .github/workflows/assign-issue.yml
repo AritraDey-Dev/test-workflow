@@ -6,7 +6,7 @@ on:
   issue_comment:
     types: [created]
   schedule:
-    - cron: "0 0 * * *" # Runs daily to check deadlines
+    - cron: "0 0 * * *" 
 
 permissions:
   issues: write
@@ -101,26 +101,23 @@ jobs:
               if (!issue.assignees.length) continue;
 
               const createdAt = new Date(issue.created_at);
-              let deadlineDays = 0;
+              let deadlineMinutes = 0;
 
-              if (issue.labels.some(l => l.name === "priority: high")) deadlineDays = 3;
-              if (issue.labels.some(l => l.name === "priority: medium")) deadlineDays = 6;
-              if (issue.labels.some(l => l.name === "priority: low")) deadlineDays = 8;
+              if (issue.labels.some(l => l.name === "priority: high")) deadlineMinutes = 3;
+              if (issue.labels.some(l => l.name === "priority: medium")) deadlineMinutes = 6;
+              if (issue.labels.some(l => l.name === "priority: low")) deadlineMinutes = 8;
 
-              if (!deadlineDays) continue;
+              if (!deadlineMinutes) continue;
 
-              const deadline = new Date(createdAt);
-              deadline.setDate(deadline.getDate() + deadlineDays);
+              const deadline = new Date(createdAt.getTime() + deadlineMinutes * 60000);
+              const reminder = new Date(deadline.getTime() - 60000);
 
-              const reminder = new Date(deadline);
-              reminder.setDate(reminder.getDate() - 1);
-
-              if (now.toISOString().slice(0, 10) === reminder.toISOString().slice(0, 10)) {
+              if (now.toISOString().slice(0, 16) === reminder.toISOString().slice(0, 16)) {
                 await github.rest.issues.createComment({
                   owner: context.repo.owner,
                   repo: context.repo.repo,
                   issue_number: issue.number,
-                  body: `@${issue.assignees.map(a => a.login).join(", ")} Your deadline is tomorrow. Please update your progress.`
+                  body: `@${issue.assignees.map(a => a.login).join(", ")} Your deadline is in 1 minute. Please update your progress.`
                 });
               }
 
@@ -154,3 +151,4 @@ jobs:
                 });
               }
             }
+
