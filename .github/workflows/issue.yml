@@ -1,4 +1,4 @@
-name: Issue Assignment & Tracking
+name: Issue Assignment 
 
 on:
   issues:
