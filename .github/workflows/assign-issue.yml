@@ -1,18 +1,14 @@
-name: Issue Assignment & Tracking
+name: Auto Assign Issue Creator
 
 on:
   issues:
-    types: [opened, edited, reopened, labeled, unlabeled]
-  issue_comment:
-    types: [created]
-  schedule:
-    - cron: "0 0 * * *" # Runs daily to check deadlines
-
-permissions:
-  issues: write
+    types:
+      - opened
+      - edited
+      - reopened
 
 jobs:
-  assign-issues:
+  assign-issue-creator:
     runs-on: ubuntu-latest
     steps:
       - name: Assign Issue Creator if Opted In
@@ -21,32 +17,37 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
             const issue = context.payload.issue;
-            const body = (issue.body || "").toLowerCase().replace(/\s+/g, " ");
-            const assignees = issue.assignees.map(a => a.login);
+            const body = issue.body || "";
+            const creator = issue.user.login;
 
-             if (body.includes("would you like to work on this issue? yes")) {
-             await github.rest.issues.addAssignees({
+            // Extract dropdown response by checking issue JSON payload
+            const selectedOptionMatch = body.match(/Would you like to work on this issue\?\n- \[x\] Yes/);
+
+            if (selectedOptionMatch) {
+              await github.rest.issues.addAssignees({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
                 issue_number: issue.number,
-                assignees: [issue.user.login],
-               });
+                assignees: [creator],
+              });
 
-
+              // Remove 'up-for-grabs' label if present
               await github.rest.issues.removeLabel({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
                 issue_number: issue.number,
                 name: "up-for-grabs"
-            }).catch(() => {});
+              }).catch(() => {});
 
+              // Add 'Status: Assigned' label
               await github.rest.issues.addLabels({
-             owner: context.repo.owner,
-            repo: context.repo.repo,
-            issue_number: issue.number,
-            labels: ["Status: Assigned"]
-            });
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issue.number,
+                labels: ["Status: Assigned"]
+              });
             }
+
 
       - name: Handle /assign Comment
         if: github.event_name == 'issue_comment'
