@@ -1,0 +1,88 @@
+name: Issue Assignment & Tracking
+
+on:
+  issues:
+    types: [opened, edited, reopened, labeled, unlabeled]
+  issue_comment:
+    types: [created]
+  schedule:
+    - cron: "*/1 * * * *"  # Runs every 5 minutes
+
+permissions:
+  issues: write
+
+jobs:
+  check-deadlines:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check Issue Deadlines (Testing in Minutes)
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const { data: issues } = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: "open",
+            });
+
+            const now = new Date();
+            for (const issue of issues) {
+              if (!issue.assignees.length) continue;
+
+              const createdAt = new Date(issue.created_at);
+              let deadlineMinutes = 0;
+
+              if (issue.labels.some(l => l.name === "priority: high")) deadlineMinutes = 3;  // 3 minutes
+              if (issue.labels.some(l => l.name === "priority: medium")) deadlineMinutes = 6; // 6 minutes
+              if (issue.labels.some(l => l.name === "priority: low")) deadlineMinutes = 8;  // 8 minutes
+
+              if (!deadlineMinutes) continue;
+
+              const deadline = new Date(createdAt);
+              deadline.setMinutes(deadline.getMinutes() + deadlineMinutes);
+
+              const reminder = new Date(deadline);
+              reminder.setMinutes(reminder.getMinutes() - 1);
+
+              // Send reminder 1 minute before deadline
+              if (now.toISOString().slice(0, 16) === reminder.toISOString().slice(0, 16)) {
+                await github.rest.issues.createComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: issue.number,
+                  body: `@${issue.assignees.map(a => a.login).join(", ")} Your deadline is in 1 minute. Please update your progress.`
+                });
+              }
+
+              // If deadline exceeded, unassign and mark as up-for-grabs
+              if (now > deadline) {
+                await github.rest.issues.removeAssignees({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: issue.number,
+                  assignees: issue.assignees.map(a => a.login),
+                });
+
+                await github.rest.issues.removeLabel({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: issue.number,
+                  name: "Status: Assigned"
+                }).catch(() => {});
+
+                await github.rest.issues.addLabels({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: issue.number,
+                  labels: ["up-for-grabs"]
+                });
+
+                await github.rest.issues.createComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: issue.number,
+                  body: "This issue has been unassigned due to inactivity. It is now available for others to take."
+                });
+              }
+            }
