@@ -21,30 +21,31 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
             const issue = context.payload.issue;
-            const body = issue.body || "";
+            const body = (issue.body || "").toLowerCase().replace(/\s+/g, " ");
             const assignees = issue.assignees.map(a => a.login);
 
-            if (!assignees.length && body.includes("Would you like to work on this issue?\nYes")) {
-              await github.rest.issues.addAssignees({
+             if (body.includes("would you like to work on this issue? yes")) {
+             await github.rest.issues.addAssignees({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
                 issue_number: issue.number,
                 assignees: [issue.user.login],
-              });
+               });
+
 
               await github.rest.issues.removeLabel({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
                 issue_number: issue.number,
                 name: "up-for-grabs"
-              }).catch(() => {});
+            }).catch(() => {});
 
               await github.rest.issues.addLabels({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                issue_number: issue.number,
-                labels: ["Status: Assigned"]
-              });
+             owner: context.repo.owner,
+            repo: context.repo.repo,
+            issue_number: issue.number,
+            labels: ["Status: Assigned"]
+            });
             }
 
       - name: Handle /assign Comment
