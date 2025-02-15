@@ -1,0 +1,20 @@
+{
+  "name": "test-workflow",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/AritraDey-Dev/test-workflow.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/AritraDey-Dev/test-workflow/issues"
+  },
+  "homepage": "https://github.com/AritraDey-Dev/test-workflow#readme",
+  "description": ""
+}
