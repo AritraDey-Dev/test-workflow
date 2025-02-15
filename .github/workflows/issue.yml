@@ -1,10 +1,6 @@
 name: Issue Assignment & Tracking
 
 on:
-  issues:
-    types: [opened, edited, reopened, labeled, unlabeled]
-  issue_comment:
-    types: [created]
   schedule:
     - cron: "*/1 * * * *"  # Runs every minute
 
@@ -33,19 +29,50 @@ jobs:
               if (!issue.assignees.length) continue;
 
               const createdAt = new Date(issue.created_at);
-              let deadlineMinutes = 0;
+              const labels = issue.labels.map(l => l.name);
 
-              if (issue.labels.some(l => l.name === "priority: high")) deadlineMinutes = 1;
-              if (issue.labels.some(l => l.name === "priority: medium")) deadlineMinutes = 2;
-              if (issue.labels.some(l => l.name === "priority: low")) deadlineMinutes = 3;
-
-              if (!deadlineMinutes) continue;
-
+              let deadlineMinutes = 3; // Max deadline
               const deadline = new Date(createdAt.getTime() + deadlineMinutes * 60000);
-              console.log(`Issue #${issue.number} | Created at: ${createdAt}, Deadline: ${deadline}`);
 
-              // If deadline exceeded, unassign and mark as up-for-grabs
-              if (now >= deadline) {
+              const timeLeft = Math.floor((deadline - now) / 60000); // Minutes remaining
+
+              console.log(`Issue #${issue.number} | Created: ${createdAt} | Deadline: ${deadline} | Time left: ${timeLeft} min`);
+
+              // 🔹 1 Minute Left Reminder
+              if (timeLeft === 1) {
+                console.log(`⚠️ Sending reminder for Issue #${issue.number}`);
+                await github.rest.issues.createComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: issue.number,
+                  body: `@${issue.assignees.map(a => a.login).join(", ")} Your deadline is in 1 minute. Please update your progress.`
+                });
+              }
+
+              // 🔹 1 Minute Over → Add "priority: low" Label
+              if (timeLeft === 2 && !labels.includes("priority: low")) {
+                console.log(`🔹 Adding "priority: low" label to Issue #${issue.number}`);
+                await github.rest.issues.addLabels({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: issue.number,
+                  labels: ["priority: low"]
+                });
+              }
+
+              // 🔹 2 Minutes Over → Add "priority: medium" Label
+              if (timeLeft === 1 && !labels.includes("priority: medium")) {
+                console.log(`🔹 Adding "priority: medium" label to Issue #${issue.number}`);
+                await github.rest.issues.addLabels({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: issue.number,
+                  labels: ["priority: medium"]
+                });
+              }
+
+              // 🔹 3 Minutes Over → Remove Assignee & Add "up-for-grabs"
+              if (timeLeft <= 0) {
                 console.log(`❌ Deadline exceeded for Issue #${issue.number} | Unassigning...`);
 
                 try {
@@ -57,12 +84,10 @@ jobs:
                   });
                   console.log(`✅ Assignees removed for Issue #${issue.number}`);
                 } catch (error) {
-                  console.error(`⚠️ Failed to remove assignees for Issue #${issue.number}: ${error.message}`);
+                  console.error(`⚠️ Failed to remove assignees: ${error.message}`);
                 }
 
-                const labels = issue.labels.map(l => l.name);
-
-                // Remove "Status: Assigned" if it exists
+                // Remove "Status: Assigned" label
                 if (labels.includes("Status: Assigned")) {
                   try {
                     await github.rest.issues.removeLabel({
@@ -71,13 +96,13 @@ jobs:
                       issue_number: issue.number,
                       name: "Status: Assigned"
                     });
-                    console.log(`✅ Removed "Status: Assigned" label for Issue #${issue.number}`);
+                    console.log(`✅ Removed "Status: Assigned" label`);
                   } catch (error) {
-                    console.error(`⚠️ Failed to remove "Status: Assigned" label for Issue #${issue.number}: ${error.message}`);
+                    console.error(`⚠️ Failed to remove "Status: Assigned" label: ${error.message}`);
                   }
                 }
 
-                // Ensure "up-for-grabs" is added only if not already there
+                // Add "up-for-grabs" label
                 if (!labels.includes("up-for-grabs")) {
                   try {
                     await github.rest.issues.addLabels({
@@ -86,9 +111,9 @@ jobs:
                       issue_number: issue.number,
                       labels: ["up-for-grabs"]
                     });
-                    console.log(`✅ Added "up-for-grabs" label for Issue #${issue.number}`);
+                    console.log(`✅ Added "up-for-grabs" label`);
                   } catch (error) {
-                    console.error(`⚠️ Failed to add "up-for-grabs" label for Issue #${issue.number}: ${error.message}`);
+                    console.error(`⚠️ Failed to add "up-for-grabs" label: ${error.message}`);
                   }
                 }
 
