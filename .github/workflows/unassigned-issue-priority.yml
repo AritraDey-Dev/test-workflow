@@ -26,19 +26,17 @@ jobs:
             console.log(`Current time: ${now}`);
 
             for (const issue of issues) {
-              if (issue.assignees.length) continue; // Skip assigned issues
+              if (issue.assignees.length > 0) continue; // Only process unassigned issues
 
               const createdAt = new Date(issue.created_at);
               const labels = issue.labels.map(l => l.name);
 
-              let deadlineMinutes = 3; // Max deadline
-              const deadline = new Date(createdAt.getTime() + deadlineMinutes * 60000);
-              const timeLeft = Math.floor((deadline - now) / 60000); // Minutes remaining
+              const elapsedMinutes = Math.floor((now - createdAt) / 60000); // Time since issue creation
 
-              console.log(`Issue #${issue.number} | Created: ${createdAt} | Deadline: ${deadline} | Time left: ${timeLeft} min`);
+              console.log(`Issue #${issue.number} | Created: ${createdAt} | Time elapsed: ${elapsedMinutes} min`);
 
-              // Add labels based on time left
-              if (timeLeft === 2 && !labels.includes("priority: low")) {
+              // Apply priority labels at correct intervals
+              if (elapsedMinutes >= 1 && !labels.includes("priority: low")) {
                 console.log(`🔹 Adding "priority: low" label to Issue #${issue.number}`);
                 await github.rest.issues.addLabels({
                   owner: context.repo.owner,
@@ -48,7 +46,7 @@ jobs:
                 });
               }
 
-              if (timeLeft === 1 && !labels.includes("priority: medium")) {
+              if (elapsedMinutes >= 2 && !labels.includes("priority: medium")) {
                 console.log(`🔹 Adding "priority: medium" label to Issue #${issue.number}`);
                 await github.rest.issues.addLabels({
                   owner: context.repo.owner,
@@ -58,7 +56,7 @@ jobs:
                 });
               }
 
-              if (timeLeft === 0 && !labels.includes("priority: high")) {
+              if (elapsedMinutes >= 3 && !labels.includes("priority: high")) {
                 console.log(`🔹 Adding "priority: high" label to Issue #${issue.number}`);
                 await github.rest.issues.addLabels({
                   owner: context.repo.owner,
