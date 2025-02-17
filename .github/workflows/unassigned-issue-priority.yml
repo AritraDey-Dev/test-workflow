@@ -2,7 +2,7 @@ name: Unassigned Issue Priority Tracking
 
 on:
   schedule:
-    - cron: "*/1 * * * *"  # Runs every minute
+    - cron: "* * * * *"
 
 permissions:
   issues: write
